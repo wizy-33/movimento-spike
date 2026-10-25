@@ -477,6 +477,7 @@ async function playUri(input: string, forSession = false): Promise<boolean> {
     return false;
   }
   if (forSession) sessionUri = uri;
+  await checkTrackPlayable(uri);
   const qs = selectedDevice ? `?device_id=${encodeURIComponent(selectedDevice.id)}` : '';
   log(`PLAY ${uri} su ${selectedDevice?.name ?? 'dispositivo attivo (nessuno scelto)'}`);
   const r = await api('PUT', `/me/player/play${qs}`, { uris: [uri], position_ms: 0 });
@@ -496,6 +497,22 @@ async function playUri(input: string, forSession = false): Promise<boolean> {
   return false;
 }
 
+// Spotify fermava la musica quando gli si chiedeva un brano: verifico se quel brano
+// è riproducibile per questo account e mercato prima di mandarlo.
+async function checkTrackPlayable(uri: string) {
+  const id = uri.match(/^spotify:track:([A-Za-z0-9]+)$/)?.[1];
+  if (!id) return;
+  const r = await api('GET', `/tracks/${id}?market=from_token`, undefined, { quiet: true });
+  if (r.status !== 200 || !r.data) return log(`BRANO verifica non disponibile (HTTP ${r.status})`, 'warn');
+  const t = r.data;
+  const relinked = t.linked_from ? `, sostituito da Spotify con ${t.uri}` : '';
+  const restriction = t.restrictions?.reason ? `, restrizione: ${t.restrictions.reason}` : '';
+  log(
+    `BRANO "${t.name}" — ${(t.artists ?? []).map((a: any) => a.name).join(', ')}: is_playable=${t.is_playable}${restriction}${relinked}`,
+    t.is_playable === false ? 'err' : 'info',
+  );
+}
+
 let playCheck: { uri: string; at: number; forSession: boolean } | null = null;
 
 function checkPlayConfirmed() {
@@ -509,7 +526,10 @@ function checkPlayConfirmed() {
       `PLAY ha risposto 204 ma dopo ${elapsed} ms Spotify NON suona il brano (riporta: ${sp.has ? `"${sp.name || 'nessun brano'}", ${sp.playing ? 'in riproduzione' : 'in pausa'}` : 'nessuna riproduzione'})`,
       'err',
     );
-    pendingPlay = { uri: playCheck.uri, at: Date.now(), forSession: playCheck.forSession };
+    // Riprovo al ritorno solo se Spotify sembra irraggiungibile: se risponde ma rifiuta
+    // il brano, riprovare fermerebbe di nuovo la musica a ogni rientro in Spike.
+    if (!sp.has) pendingPlay = { uri: playCheck.uri, at: Date.now(), forSession: playCheck.forSession };
+    else log('PLAY Spotify risponde ma non avvia il brano: non lo riprovo in automatico');
     if (playCheck.forSession && ses.state === 'playing') {
       log('SESSIONE il brano non è partito: torno alla spiegazione', 'warn');
       showExplain();
@@ -1204,6 +1224,13 @@ $('spPlay').onclick = () => {
 $<HTMLInputElement>('spUri').value = load('spike.spUri', '');
 $('spTransfer').onclick = spTransfer;
 $('spLadder').onclick = pauseLadder;
+$('spUseCurrent').onclick = () => {
+  if (!sp.uri) return log('Nessun brano in riproduzione da copiare', 'warn');
+  $<HTMLInputElement>('spUri').value = sp.uri;
+  save('spike.spUri', sp.uri);
+  syncOpenTrack();
+  log(`URI preso dal brano in riproduzione: ${sp.name} (${sp.uri})`);
+};
 // Apre Spotify direttamente sul brano del campo URI: per lei sarebbe un tocco su Spotify invece di cercarlo.
 const openTrack = $<HTMLAnchorElement>('spOpenTrack');
 const syncOpenTrack = () => (openTrack.href = normalizeUri($<HTMLInputElement>('spUri').value) || 'spotify:');
