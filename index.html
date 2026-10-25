@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Spike" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#16161d" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Movimento Spike</title>
+  </head>
+  <body>
+    <header>
+      <h1>Movimento – spike</h1>
+      <div id="env" class="small"></div>
+    </header>
+
+    <section>
+      <h2>Sessione di prova (Test 4 + flusso)</h2>
+      <label>Motore
+        <select id="engine">
+          <option value="spotify">A · Spotify</option>
+          <option value="local">B · Audio in-app</option>
+        </select>
+      </label>
+      <label>Brano 1 – URI Spotify <input id="uri0" placeholder="spotify:track:..." /></label>
+      <label>Brano 2 – URI Spotify <input id="uri1" placeholder="spotify:track:..." /></label>
+      <p class="small">Col motore B si usano i file scelti nel Test 5.</p>
+
+      <div id="display">
+        <div id="sesTrack" class="small">—</div>
+        <div id="cueNow">Pronta?</div>
+        <div id="cueNext">&nbsp;</div>
+        <div id="sesPos" class="mono">0:00.0</div>
+      </div>
+      <div id="sesExplain" class="explain" hidden></div>
+      <div id="sesSummary" class="explain" hidden></div>
+
+      <button id="sesStart" class="primary">Inizia l'allenamento di prova</button>
+      <button id="sesReady" class="primary" hidden>Sono pronta ▶</button>
+      <div class="row">
+        <button id="sesBack10">−10 s</button>
+        <button id="sesPause">Pausa</button>
+        <button id="sesResume">Riprendi</button>
+        <button id="sesFwd10">+10 s</button>
+      </div>
+      <div class="row">
+        <button id="mark">Segna</button>
+        <button id="sesStop">Termina</button>
+      </div>
+      <label class="check"><input type="checkbox" id="cueSpeak" /> Annuncia gli indizi a voce</label>
+      <label class="check"><input type="checkbox" id="cueBeep" /> Bip a ogni indizio</label>
+      <div id="marks" class="small mono"></div>
+    </section>
+
+    <section>
+      <h2>Test 1 · Controllo Spotify</h2>
+      <div id="spStatus" class="small"></div>
+      <div class="row">
+        <button id="spLogin">Login Spotify</button>
+        <button id="spLogout">Logout</button>
+      </div>
+      <button id="spDevicesBtn">Aggiorna dispositivi</button>
+      <div id="spDevices"></div>
+      <a id="spOpen" class="button" href="spotify:">Apri Spotify</a>
+      <label>URI brano <input id="spUri" placeholder="spotify:track:..." /></label>
+      <button id="spPlay" class="primary">Avvia brano sul dispositivo</button>
+      <div class="row">
+        <button id="spPause">Pausa</button>
+        <button id="spResume">Riprendi</button>
+      </div>
+      <div class="row">
+        <input id="spSeekSec" type="number" inputmode="numeric" placeholder="secondo" />
+        <button id="spSeek">Vai al secondo</button>
+      </div>
+      <div id="spNow" class="nowplaying mono">—</div>
+      <div class="row">
+        <button id="spPollToggle">Polling: OFF</button>
+      </div>
+      <label class="check"><input type="checkbox" id="spLogPoll" /> Logga ogni polling riuscito</label>
+    </section>
+
+    <section>
+      <h2>Test 2 · Voce e suoni sopra la musica</h2>
+      <label>navigator.audioSession.type
+        <select id="audioSession">
+          <option value="">(non impostato)</option>
+          <option>auto</option>
+          <option>ambient</option>
+          <option>transient</option>
+          <option>transient-solo</option>
+          <option>playback</option>
+          <option>play-and-record</option>
+        </select>
+      </label>
+      <div class="row">
+        <button id="speak" class="primary">Parla</button>
+        <button id="beep" class="primary">Bip</button>
+      </div>
+      <button id="clip">Clip voce registrata (Web Audio)</button>
+      <label>Abbassa audio in-app durante la voce
+        <select id="duckMode">
+          <option value="none">no</option>
+          <option value="volume">sì, con audio.volume</option>
+          <option value="gain">sì, con GainNode (Web Audio)</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h2>Test 3 · Schermo sempre acceso</h2>
+      <button id="wlToggle" class="primary">Attiva wake lock</button>
+      <div id="wlStatus" class="mono"></div>
+    </section>
+
+    <section>
+      <h2>Test 5 · Audio in-app</h2>
+      <label>Brano 1 <input id="file0" type="file" accept="audio/*" /></label>
+      <div id="fileInfo0" class="small"></div>
+      <label>Brano 2 <input id="file1" type="file" accept="audio/*" /></label>
+      <div id="fileInfo1" class="small"></div>
+      <div class="row">
+        <button id="load0">Brano 1 nel player</button>
+        <button id="load1">Brano 2 nel player</button>
+      </div>
+      <audio id="audio" controls playsinline></audio>
+      <div id="storageInfo" class="small"></div>
+    </section>
+
+    <section>
+      <h2>Esiti</h2>
+      <label>Scenario <select id="scenario"></select></label>
+      <label>Nota <input id="note" placeholder="facoltativa" /></label>
+      <div id="outcomes" class="grid"></div>
+      <div id="results" class="small"></div>
+      <button id="copyResults">Copia tabella risultati</button>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <div class="row">
+        <button id="copyLog" class="primary">Copia log</button>
+        <button id="clearLog">Pulisci</button>
+      </div>
+      <div id="log" class="mono"></div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
