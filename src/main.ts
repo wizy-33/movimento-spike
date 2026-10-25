@@ -513,6 +513,36 @@ async function checkTrackPlayable(uri: string) {
   );
 }
 
+// PUT /me/player/play con "uris" ferma Spotify su iPhone anche con brani riproducibili,
+// mentre pausa/riprendi/seek funzionano. Provo gli altri modi di avviare un brano.
+type PlayVariant = 'uris' | 'album' | 'queue';
+async function playVariant(kind: PlayVariant) {
+  const uri = normalizeUri($<HTMLInputElement>('spUri').value);
+  const id = uri.match(/^spotify:track:([A-Za-z0-9]+)$/)?.[1];
+  if (!id) return log(`VARIANTE serve un URI di brano valido, non "${uri}"`, 'err');
+  const qs = selectedDevice ? `?device_id=${encodeURIComponent(selectedDevice.id)}` : '';
+  log(`VARIANTE ${kind} → ${uri} su ${selectedDevice?.name ?? 'dispositivo attivo'}`, 'note');
+  let r: ApiResult;
+  if (kind === 'uris') {
+    r = await api('PUT', `/me/player/play${qs}`, { uris: [uri] });
+  } else if (kind === 'album') {
+    const t = await api('GET', `/tracks/${id}?market=from_token`, undefined, { quiet: true });
+    const album: string | undefined = t.data?.album?.uri;
+    if (!album) return log('VARIANTE album: album del brano non trovato', 'err');
+    log(`VARIANTE album: ${t.data.album.name} (${album})`);
+    r = await api('PUT', `/me/player/play${qs}`, { context_uri: album, offset: { uri } });
+  } else {
+    const dev = selectedDevice ? `&device_id=${encodeURIComponent(selectedDevice.id)}` : '';
+    r = await api('POST', `/me/player/queue?uri=${encodeURIComponent(uri)}${dev}`);
+    if (r.status >= 300) return;
+    r = await api('POST', `/me/player/next${qs}`);
+  }
+  if (r.status >= 300) return;
+  commandAt = performance.now();
+  playCheck = { uri, at: performance.now(), forSession: false };
+  startPolling();
+}
+
 let playCheck: { uri: string; at: number; forSession: boolean } | null = null;
 
 function checkPlayConfirmed() {
@@ -1224,6 +1254,9 @@ $('spPlay').onclick = () => {
 $<HTMLInputElement>('spUri').value = load('spike.spUri', '');
 $('spTransfer').onclick = spTransfer;
 $('spLadder').onclick = pauseLadder;
+$('spVarUris').onclick = () => playVariant('uris');
+$('spVarAlbum').onclick = () => playVariant('album');
+$('spVarQueue').onclick = () => playVariant('queue');
 $('spUseCurrent').onclick = async () => {
   await poll();
   startPolling();
