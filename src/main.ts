@@ -464,10 +464,14 @@ function renderDevices() {
 let pendingPlay: { uri: string; at: number; forSession: boolean } | null = null;
 let sessionUri = '';
 
-async function playUri(input: string, forSession = false): Promise<boolean> {
-  // Accetta anche il link di "Condividi": https://open.spotify.com/intl-it/track/<id>?si=...
+// Accetta anche il link di "Condividi": https://open.spotify.com/intl-it/track/<id>?si=...
+function normalizeUri(input: string) {
   const link = input.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([A-Za-z0-9]+)/);
-  const uri = link ? `spotify:track:${link[1]}` : input;
+  return link ? `spotify:track:${link[1]}` : input.trim();
+}
+
+async function playUri(input: string, forSession = false): Promise<boolean> {
+  const uri = normalizeUri(input);
   if (!uri.startsWith('spotify:')) {
     log(`URI non valido: "${uri}"`, 'err');
     return false;
@@ -512,6 +516,56 @@ function checkPlayConfirmed() {
     }
     playCheck = null;
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function waitPlaying(timeoutMs: number) {
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeoutMs) {
+    await sleep(500);
+    if (sp.has && sp.playing && performance.now() - commandAt > 1000) return Math.round(performance.now() - t0);
+  }
+  return -1;
+}
+
+// Quanto può restare in pausa Spotify in background prima di non rispondere più?
+// Nel flusso "Sono pronta" fra un brano e l'altro la musica è ferma: questo è il numero che conta.
+const PAUSE_STEPS = [10, 30, 60, 120, 300];
+let ladderRunning = false;
+
+async function pauseLadder() {
+  if (ladderRunning) {
+    ladderRunning = false;
+    return log('TEST PAUSE interrotto a mano', 'warn');
+  }
+  if (!(sp.has && sp.playing)) return log('TEST PAUSE: fai prima suonare un brano su Spotify', 'warn');
+  ladderRunning = true;
+  $('spLadder').textContent = 'Interrompi test pause';
+  startPolling();
+  if (!wlWanted) await setWakeLock(true);
+  log(`TEST PAUSE inizio: pause di ${PAUSE_STEPS.join(', ')} s, tieni Spike aperta e non toccare Spotify`, 'note');
+  for (const s of PAUSE_STEPS) {
+    if (!ladderRunning) break;
+    await spPause();
+    log(`TEST PAUSE in pausa per ${s} s…`);
+    const end = Date.now() + s * 1000;
+    while (ladderRunning && Date.now() < end) await sleep(500);
+    if (!ladderRunning) break;
+    await getDevices();
+    await spResume();
+    const ms = await waitPlaying(6000);
+    if (ms >= 0) {
+      log(`TEST PAUSE ${s} s: Spotify ripartito (conferma in ${ms} ms)`, 'ok');
+      await sleep(5000);
+    } else {
+      log(`TEST PAUSE ${s} s: Spotify NON riparte dopo questa pausa`, 'err');
+      break;
+    }
+  }
+  if (ladderRunning) log('TEST PAUSE fine', 'note');
+  ladderRunning = false;
+  $('spLadder').textContent = 'Test pause automatico';
 }
 
 async function spTransfer() {
@@ -1149,6 +1203,13 @@ $('spPlay').onclick = () => {
 };
 $<HTMLInputElement>('spUri').value = load('spike.spUri', '');
 $('spTransfer').onclick = spTransfer;
+$('spLadder').onclick = pauseLadder;
+// Apre Spotify direttamente sul brano del campo URI: per lei sarebbe un tocco su Spotify invece di cercarlo.
+const openTrack = $<HTMLAnchorElement>('spOpenTrack');
+const syncOpenTrack = () => (openTrack.href = normalizeUri($<HTMLInputElement>('spUri').value) || 'spotify:');
+$('spUri').addEventListener('input', syncOpenTrack);
+syncOpenTrack();
+openTrack.onclick = () => log(`APRI BRANO IN SPOTIFY ${openTrack.href}`);
 $('spPause').onclick = spPause;
 $('spResume').onclick = spResume;
 $('spSeek').onclick = () => spSeek(Number($<HTMLInputElement>('spSeekSec').value || 0) * 1000);
