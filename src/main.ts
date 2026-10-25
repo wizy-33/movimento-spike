@@ -341,7 +341,14 @@ async function accessToken() {
 type ApiResult = { status: number; data: any; reason?: string };
 let rateLimitUntil = 0;
 
-async function api(method: string, path: string, body?: unknown, opts: { quiet?: boolean; retried?: boolean } = {}): Promise<ApiResult> {
+const API_TIMEOUT_MS = 5000;
+
+async function api(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts: { quiet?: boolean; retried?: boolean; timedOut?: boolean } = {},
+): Promise<ApiResult> {
   if (Date.now() < rateLimitUntil) {
     if (!opts.quiet) log(`${method} ${path} saltata: rate limit attivo`, 'warn');
     return { status: 429, data: null };
@@ -352,18 +359,32 @@ async function api(method: string, path: string, body?: unknown, opts: { quiet?:
     return { status: 0, data: null };
   }
   const t0 = performance.now();
+  // Dopo il ritorno dal background alcune richieste restavano appese ~12 s. Le interrompo
+  // dopo 5 s e riprovo una volta: se il secondo tentativo è rapido, il colpevole è la
+  // connessione rimasta "morta" durante la sospensione, non Spotify.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), API_TIMEOUT_MS);
   let res: Response;
   try {
     res = await fetch(API + path, {
       method,
       headers: { Authorization: `Bearer ${access}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
+      signal: abort.signal,
     });
   } catch (e) {
-    log(`${method} ${path} → errore di rete: ${e}`, 'err');
+    clearTimeout(timer);
+    if (abort.signal.aborted && !opts.timedOut) {
+      log(`${method} ${path} → TIMEOUT dopo ${API_TIMEOUT_MS / 1000} s, riprovo una volta`, 'warn');
+      return api(method, path, body, { ...opts, timedOut: true });
+    }
+    log(`${method} ${path} → ${abort.signal.aborted ? 'TIMEOUT anche al secondo tentativo' : `errore di rete: ${e}`}`, 'err');
     return { status: 0, data: null };
   }
+  clearTimeout(timer);
   const ms = Math.round(performance.now() - t0);
+  if (opts.timedOut) log(`${method} ${path} secondo tentativo dopo timeout: ${ms} ms`, 'warn');
+  else if (ms > 2000) log(`${method} ${path} LENTA: ${ms} ms`, 'warn');
   const text = await res.text();
   let data: any = null;
   try {
@@ -458,15 +479,46 @@ async function playUri(input: string, forSession = false): Promise<boolean> {
   if (r.status === 204 || r.status === 202 || r.status === 200) {
     pendingPlay = null;
     commandAt = performance.now();
+    // 204 vuol dire solo "comando inoltrato": se il brano suona davvero lo dice il polling.
+    playCheck = { uri, at: performance.now(), forSession };
     sp = { ...sp, has: true, uri, basePos: 0, baseAt: performance.now(), playing: true };
     startPolling();
     return true;
   }
   pendingPlay = { uri, at: Date.now(), forSession };
   if (r.status === 404) {
-    log(`PLAY fallito ${r.reason ?? ''}: tocca "Apri Spotify", al ritorno riprovo da solo`, 'err');
+    log(`PLAY fallito (${r.reason ?? r.data?.error?.message ?? '404'}): tocca "Apri Spotify", al ritorno riprovo da solo`, 'err');
   }
   return false;
+}
+
+let playCheck: { uri: string; at: number; forSession: boolean } | null = null;
+
+function checkPlayConfirmed() {
+  if (!playCheck) return;
+  const elapsed = Math.round(performance.now() - playCheck.at);
+  if (sp.has && sp.uri === playCheck.uri && sp.playing) {
+    log(`PLAY confermato dal polling dopo ${elapsed} ms`, 'ok');
+    playCheck = null;
+  } else if (elapsed > 5000) {
+    log(
+      `PLAY ha risposto 204 ma dopo ${elapsed} ms Spotify NON suona il brano (riporta: ${sp.has ? `"${sp.name || 'nessun brano'}", ${sp.playing ? 'in riproduzione' : 'in pausa'}` : 'nessuna riproduzione'})`,
+      'err',
+    );
+    pendingPlay = { uri: playCheck.uri, at: Date.now(), forSession: playCheck.forSession };
+    if (playCheck.forSession && ses.state === 'playing') {
+      log('SESSIONE il brano non è partito: torno alla spiegazione', 'warn');
+      showExplain();
+    }
+    playCheck = null;
+  }
+}
+
+async function spTransfer() {
+  if (!selectedDevice) return log('TRASFERISCI: scegli prima un dispositivo', 'warn');
+  log(`TRASFERISCI riproduzione su ${selectedDevice.name} (play: true)`);
+  const r = await api('PUT', '/me/player', { device_ids: [selectedDevice.id], play: true });
+  if (r.status < 300) startPolling();
 }
 
 async function retryPendingPlay() {
@@ -552,6 +604,7 @@ async function poll() {
     if (sp.has) log('POLL 204: nessuna riproduzione attiva', 'warn');
     sp.has = false;
     sp.playing = false;
+    checkPlayConfirmed();
     onSpotifyState(prev);
     return;
   }
@@ -583,6 +636,7 @@ async function poll() {
     playing: !!d.is_playing,
     device: d.device?.name ?? '',
   };
+  checkPlayConfirmed();
   onSpotifyState(prev);
 }
 
@@ -957,7 +1011,7 @@ function stopSession() {
 // o è partito un altro brano (Autoplay di Spotify) che allora metto in pausa.
 function onSpotifyState(prev: { uri: string; playing: boolean; has: boolean; pos: number }) {
   if (ses.state !== 'playing' || ses.engine !== 'spotify') return;
-  if (performance.now() - ses.trackStartedAt < 4000) return;
+  if (playCheck || performance.now() - ses.trackStartedAt < 4000) return;
   const expected = sessionUri;
   if (!sp.has) return endTrack('Spotify non riporta più nessuna riproduzione');
   if (sp.uri !== expected) {
@@ -1094,6 +1148,7 @@ $('spPlay').onclick = () => {
   playUri(uri);
 };
 $<HTMLInputElement>('spUri').value = load('spike.spUri', '');
+$('spTransfer').onclick = spTransfer;
 $('spPause').onclick = spPause;
 $('spResume').onclick = spResume;
 $('spSeek').onclick = () => spSeek(Number($<HTMLInputElement>('spSeekSec').value || 0) * 1000);
