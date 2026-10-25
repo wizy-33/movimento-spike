@@ -1224,8 +1224,10 @@ $('spPlay').onclick = () => {
 $<HTMLInputElement>('spUri').value = load('spike.spUri', '');
 $('spTransfer').onclick = spTransfer;
 $('spLadder').onclick = pauseLadder;
-$('spUseCurrent').onclick = () => {
-  if (!sp.uri) return log('Nessun brano in riproduzione da copiare', 'warn');
+$('spUseCurrent').onclick = async () => {
+  await poll();
+  startPolling();
+  if (!sp.has || !sp.uri) return log('Spotify non riporta nessun brano in riproduzione da copiare', 'warn');
   $<HTMLInputElement>('spUri').value = sp.uri;
   save('spike.spUri', sp.uri);
   syncOpenTrack();
