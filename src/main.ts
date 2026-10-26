@@ -341,7 +341,9 @@ async function accessToken() {
 type ApiResult = { status: number; data: any; reason?: string };
 let rateLimitUntil = 0;
 
-const API_TIMEOUT_MS = 5000;
+// Con 5 s anche il secondo tentativo restava appeso: il blocco al rientro dura ~12 s
+// e non si sblocca riprovando, quindi lascio finire la richiesta e la segnalo come lenta.
+const API_TIMEOUT_MS = 15000;
 
 async function api(
   method: string,
@@ -603,7 +605,8 @@ async function pauseLadder() {
     ladderRunning = false;
     return log('TEST PAUSE interrotto a mano', 'warn');
   }
-  if (!(sp.has && sp.playing)) return log('TEST PAUSE: fai prima suonare un brano su Spotify', 'warn');
+  await poll();
+  if (!(sp.has && sp.playing)) return log('TEST PAUSE: Spotify non risulta in riproduzione, fai prima suonare un brano', 'warn');
   ladderRunning = true;
   $('spLadder').textContent = 'Interrompi test pause';
   startPolling();

@@ -61,4 +61,4 @@ Hai console, rete e storage in tempo reale.
 - Funzionano: pausa, riprendi, seek, `context_uri` (album) + `offset`, coda + `next`.
   La pagina ora avvia i brani con album + offset (riserva: coda + avanti).
 - Spotify **in pausa** in background smette di rispondere dopo un tempo da misurare (Test pause automatico).
-- Al ritorno in primo piano le prime richieste possono restare appese ~12 s (ora: timeout 5 s + un nuovo tentativo).
+- Al ritorno in primo piano le prime richieste possono restare appese ~12 s e riprovare non le sblocca (timeout portato a 15 s).
