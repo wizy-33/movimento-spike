@@ -1353,5 +1353,7 @@ await handleRedirect();
 if (token) {
   log(`TOKEN salvato trovato, scade tra ${Math.round((token.expiresAt - Date.now()) / 60_000)} min`);
   getDevices();
+  // Senza polling i pulsanti non sanno cosa sta suonando Spotify: lo avvio subito.
+  startPolling();
 }
 restoreFiles().then(logStorage);
