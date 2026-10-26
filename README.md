@@ -52,3 +52,13 @@ Hai console, rete e storage in tempo reale.
   Gli indizi sono in `SESSION` in `src/main.ts`. "Segna" logga la posizione corrente: serve per scrivere i timestamp veri.
 - **Esiti**: scegli lo scenario, tocca l'esito (eventuale nota prima). "Copia tabella risultati" produce la tabella in Markdown.
 - **Copia log**: il log resta salvato anche dopo il ricaricamento (il login ricarica la pagina).
+
+## Cosa è emerso finora (iPhone, iOS 18.7)
+
+- Login PKCE dall'app installata: funziona (il redirect torna nella PWA, verifier trovato).
+- `PUT /me/player/play` con `uris` risponde 204 ma **ferma** Spotify, anche con brani `is_playable=true`
+  e anche con il brano già in riproduzione. Il 204 vuol dire solo "comando inoltrato".
+- Funzionano: pausa, riprendi, seek, `context_uri` (album) + `offset`, coda + `next`.
+  La pagina ora avvia i brani con album + offset (riserva: coda + avanti).
+- Spotify **in pausa** in background smette di rispondere dopo un tempo da misurare (Test pause automatico).
+- Al ritorno in primo piano le prime richieste possono restare appese ~12 s (ora: timeout 5 s + un nuovo tentativo).
