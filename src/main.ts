@@ -477,10 +477,20 @@ async function playUri(input: string, forSession = false): Promise<boolean> {
     return false;
   }
   if (forSession) sessionUri = uri;
-  await checkTrackPlayable(uri);
+  const track = await checkTrackPlayable(uri);
   const qs = selectedDevice ? `?device_id=${encodeURIComponent(selectedDevice.id)}` : '';
   log(`PLAY ${uri} su ${selectedDevice?.name ?? 'dispositivo attivo (nessuno scelto)'}`);
-  const r = await api('PUT', `/me/player/play${qs}`, { uris: [uri], position_ms: 0 });
+  // Su iPhone "uris" ferma Spotify (verificato): avvio il brano come parte del suo album.
+  // Se l'album non è noto, ripiego su coda + avanti, che pure funziona.
+  let r: ApiResult;
+  if (track?.album?.uri) {
+    r = await api('PUT', `/me/player/play${qs}`, { context_uri: track.album.uri, offset: { uri }, position_ms: 0 });
+  } else {
+    log('PLAY album del brano sconosciuto: uso coda + avanti', 'warn');
+    const dev = selectedDevice ? `&device_id=${encodeURIComponent(selectedDevice.id)}` : '';
+    r = await api('POST', `/me/player/queue?uri=${encodeURIComponent(uri)}${dev}`);
+    if (r.status < 300) r = await api('POST', `/me/player/next${qs}`);
+  }
   if (r.status === 204 || r.status === 202 || r.status === 200) {
     pendingPlay = null;
     commandAt = performance.now();
@@ -503,7 +513,10 @@ async function checkTrackPlayable(uri: string) {
   const id = uri.match(/^spotify:track:([A-Za-z0-9]+)$/)?.[1];
   if (!id) return;
   const r = await api('GET', `/tracks/${id}?market=from_token`, undefined, { quiet: true });
-  if (r.status !== 200 || !r.data) return log(`BRANO verifica non disponibile (HTTP ${r.status})`, 'warn');
+  if (r.status !== 200 || !r.data) {
+    log(`BRANO verifica non disponibile (HTTP ${r.status})`, 'warn');
+    return null;
+  }
   const t = r.data;
   const relinked = t.linked_from ? `, sostituito da Spotify con ${t.uri}` : '';
   const restriction = t.restrictions?.reason ? `, restrizione: ${t.restrictions.reason}` : '';
@@ -511,6 +524,7 @@ async function checkTrackPlayable(uri: string) {
     `BRANO "${t.name}" — ${(t.artists ?? []).map((a: any) => a.name).join(', ')}: is_playable=${t.is_playable}${restriction}${relinked}`,
     t.is_playable === false ? 'err' : 'info',
   );
+  return t;
 }
 
 // PUT /me/player/play con "uris" ferma Spotify su iPhone anche con brani riproducibili,
@@ -1136,6 +1150,12 @@ function cueTick() {
   const { pos } = enginePos();
   $('sesPos').textContent = fmt(pos);
   if (ses.state !== 'playing') return;
+  // Il brano parte dentro il suo album: senza questa pausa Spotify passerebbe al pezzo successivo.
+  if (ses.engine === 'spotify' && !playCheck && sp.playing && sp.uri === sessionUri && sp.durationMs > 0 && spPos() >= sp.durationMs - 700) {
+    log(`SESSIONE pausa anticipata a ${fmt(spPos() / 1000)} di ${fmt(sp.durationMs / 1000)}`);
+    spPause();
+    return endTrack('fine brano');
+  }
   const cues = SESSION[ses.i].cues;
   let idx = -1;
   cues.forEach((c, k) => {
