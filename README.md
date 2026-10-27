@@ -60,7 +60,7 @@ Hai console, rete e storage in tempo reale.
   e anche con il brano già in riproduzione. Il 204 vuol dire solo "comando inoltrato".
 - Funzionano: pausa, riprendi, seek, `context_uri` (album) + `offset`, coda + `next`.
   La pagina ora avvia i brani con album + offset (riserva: coda + avanti).
-- Spotify **in pausa** in background smette di rispondere dopo un tempo da misurare (Test pause automatico).
+- Spotify **in pausa** in background smette di rispondere dopo pochi secondi: 204 dopo 8 s, iPhone sparito dai dispositivi entro 30 s (test pulito, nessuna ripresa esterna). Un primo giro con riprese spontanee aveva dato ~2,5 min.
 - Al ritorno in primo piano le prime richieste possono restare appese ~12 s e riprovare non le sblocca (timeout portato a 15 s).
 - Con Spotify in **modalità offline** l'iPhone non compare fra i dispositivi: il motore A richiede Spotify online
   (i brani scaricati vanno bene, basta non attivare l'interruttore offline). Il motore B funziona anche senza rete.
