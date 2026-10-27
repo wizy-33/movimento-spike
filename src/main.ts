@@ -597,7 +597,7 @@ async function waitPlaying(timeoutMs: number) {
 
 // Quanto può restare in pausa Spotify in background prima di non rispondere più?
 // Nel flusso "Sono pronta" fra un brano e l'altro la musica è ferma: questo è il numero che conta.
-const PAUSE_STEPS = [10, 30, 60, 120, 300];
+const PAUSE_STEPS = [30, 60, 90, 120, 180, 240];
 let ladderRunning = false;
 
 async function pauseLadder() {
@@ -616,8 +616,18 @@ async function pauseLadder() {
     if (!ladderRunning) break;
     await spPause();
     log(`TEST PAUSE in pausa per ${s} s…`);
-    const end = Date.now() + s * 1000;
-    while (ladderRunning && Date.now() < end) await sleep(500);
+    // Al primo giro Spotify ripartiva da solo pochi secondi dopo la pausa: se succede lo
+    // segnalo, rimetto in pausa e ricomincio a contare, così la pausa misurata è continua.
+    let end = Date.now() + s * 1000;
+    while (ladderRunning && Date.now() < end) {
+      await sleep(500);
+      if (sp.has && sp.playing && performance.now() - commandAt > 3000) {
+        const pausedFor = Math.round(s - (end - Date.now()) / 1000);
+        log(`TEST PAUSE Spotify è ripartito DA SOLO dopo ${pausedFor} s di pausa (non da Spike): rimetto in pausa e ricomincio i ${s} s`, 'warn');
+        await spPause();
+        end = Date.now() + s * 1000;
+      }
+    }
     if (!ladderRunning) break;
     await getDevices();
     await spResume();
