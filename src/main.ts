@@ -1315,6 +1315,12 @@ $('beep').onclick = beep;
 $('clip').onclick = playClip;
 $('wlToggle').onclick = () => setWakeLock(!wlWanted);
 
+// Su iPhone accept="audio/*" (come da brief) lasciava grigi gli .m4a nell'app File.
+$('noFilter').onclick = () => {
+  [0, 1].forEach((i) => $<HTMLInputElement>(`file${i}`).removeAttribute('accept'));
+  log('FILE filtro accept rimosso: ora si può scegliere qualsiasi file', 'warn');
+};
+
 [0, 1].forEach((i) => {
   const input = $<HTMLInputElement>(`file${i}`);
   input.onchange = () => input.files?.[0] && onFilePicked(i, input.files[0]);
